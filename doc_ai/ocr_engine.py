@@ -73,11 +73,11 @@ class OCREngine:
                 if primary_lang not in easy_langs:
                     easy_langs.append(primary_lang)
             
-            print(f"  Loading EasyOCR with languages: {easy_langs}...")
+
             self.reader = easyocr.Reader(easy_langs, gpu=False, verbose=False)
             self.engine_type = 'easyocr'
             self.initialized = True
-            print(f"  ✓ EasyOCR engine initialized successfully")
+
             return
         except ImportError:
             print(f"  ⓘ EasyOCR not available, trying Tesseract...")
@@ -99,12 +99,12 @@ class OCREngine:
             
             self.tesseract_lang = '+'.join(tesseract_langs)
             
-            print(f"  Loading Tesseract OCR with languages: {self.tesseract_lang}...")
+
             
             # Test if tesseract is installed
             try:
                 version = pytesseract.get_tesseract_version()
-                print(f"  Found Tesseract version: {version}")
+
             except:
                 print(f"  ✗ Tesseract not installed on system")
                 print(f"  Install with: sudo apt-get install tesseract-ocr")
@@ -114,7 +114,7 @@ class OCREngine:
             self.pytesseract = pytesseract
             self.engine_type = 'tesseract'
             self.initialized = True
-            print(f"  ✓ Tesseract engine initialized successfully")
+
             
         except ImportError as e:
             print(f"  ✗ Error: No OCR engine available")
@@ -146,7 +146,7 @@ class OCREngine:
             scale_factor = self.MAX_IMAGE_SIZE / max_dim
             new_height = int(height * scale_factor)
             new_width = int(width * scale_factor)
-            print(f"  Resizing image from {width}x{height} to {new_width}x{new_height} (scale: {scale_factor:.2f})")
+
             resized = cv2.resize(image, (new_width, new_height), interpolation=cv2.INTER_AREA)
             return resized, scale_factor
         
@@ -225,7 +225,7 @@ class OCREngine:
                         # Silently skip problematic items
                         continue
                 
-                print(f"  [OK] EasyOCR extracted {len(extracted_items)} text items")
+
             
             elif self.engine_type == 'tesseract':
                 # Tesseract processing
@@ -292,7 +292,7 @@ class OCREngine:
                         # Silently skip problematic items
                         continue
                 
-                print(f"  [OK] Tesseract extracted {len(extracted_items)} text items")
+
             else:
                 print(f"  Warning: No active OCR engine found.")
                 return []

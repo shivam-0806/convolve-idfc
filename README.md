@@ -117,18 +117,6 @@ EOF
 
 ## Configuration
 
-### Environment Variables (Optional)
-
-Create a `.env` file for custom configuration:
-
-```bash
-# .env file
-OLLAMA_HOST=http://localhost:11434
-YOLO_MODEL_PATH=weights/best.pt
-LLM_MODEL=llama3.2
-LLM_THRESHOLD=0.7
-```
-
 ### Directory Structure
 
 After setup, your directory should look like:
@@ -136,7 +124,7 @@ After setup, your directory should look like:
 ```
 idfc/
 ├── .venv/                    # Virtual environment
-├── doc_utils/                # Utility modules (renamed from utils)
+├── doc_ai/                     # Utility modules (renamed from utils)
 │   ├── __init__.py
 │   ├── logger.py
 │   ├── ocr_engine.py
@@ -200,9 +188,6 @@ python executable.py document.png \
   --dealers master_data/dealers.txt \
   --models master_data/models.txt
 
-# Custom LLM model
-python executable.py document.png --llm-model llama3
-
 # All options
 python executable.py document.png \
   --output result.json \
@@ -223,7 +208,6 @@ python executable.py document.png \
 | `--output, -o` | Output JSON file | stdout |
 | `--pretty` | Pretty print JSON | False |
 | `--no-llm` | Disable LLM extraction | False |
-| `--llm-model` | LLM model name | llama3.2 |
 | `--llm-threshold` | LLM confidence (0.0-1.0) | 0.7 |
 | `--no-yolo` | Disable YOLO detection | False |
 | `--yolo-model` | YOLO weights path | weights/best.pt |
@@ -257,164 +241,3 @@ python executable.py train/172561841_pg1.png --pretty
   ...
 }
 ```
-
-### Verify Components
-
-```bash
-# Test imports
-python -c "from doc_utils.logger import get_logger; print('✓ Imports OK')"
-
-# Test Ollama connection
-python -c "import ollama; print(ollama.list()); print('✓ Ollama OK')"
-
-# Test YOLOv5
-python -c "import torch; print(f'PyTorch: {torch.__version__}'); print('✓ PyTorch OK')"
-```
-
-## Troubleshooting
-
-### Common Issues
-
-#### 1. Ollama Not Running
-
-**Error**: `Cannot connect to Ollama`
-
-**Solution**:
-```bash
-# Start Ollama
-ollama serve &
-
-# Verify it's running
-curl http://localhost:11434/api/version
-```
-
-#### 2. YOLOv5 Model Not Loading
-
-**Error**: `Failed to load YOLOv5 model`
-
-**Solution**:
-```bash
-# Check weights file exists
-ls -lh weights/best.pt
-
-# Test YOLOv5 loading
-python -c "import torch; model = torch.hub.load('ultralytics/yolov5', 'custom', path='weights/best.pt', trust_repo=True); print('✓ YOLOv5 OK')"
-```
-
-#### 3. Module Import Errors
-
-**Error**: `ModuleNotFoundError: No module named 'doc_utils'`
-
-**Solution**:
-```bash
-# Ensure virtual environment is activated
-source .venv/bin/activate
-
-# Reinstall dependencies
-pip install -r requirements.txt
-```
-
-#### 4. CUDA/GPU Issues
-
-**Error**: `CUDA not available`
-
-**Solution**:
-```bash
-# Check CUDA
-python -c "import torch; print(f'CUDA available: {torch.cuda.is_available()}')"
-
-# System still works on CPU (slower)
-# To use GPU, install CUDA toolkit and compatible PyTorch
-```
-
-#### 5. LLM Model Not Found
-
-**Error**: `Model llama3.2 not available`
-
-**Solution**:
-```bash
-# Pull the model
-ollama pull llama3.2
-
-# Verify models
-ollama list
-```
-
-#### 6. Permission Denied (Ollama)
-
-**Error**: `listen tcp 127.0.0.1:11434: bind: address already in use`
-
-**Solution**:
-This means Ollama is already running - this is good! No action needed.
-
-### Performance Optimization
-
-#### Faster Processing
-1. **Use GPU**: Ensure CUDA is properly configured
-2. **Reduce batch size**: Process fewer images at once
-3. **Disable YOLO**: Use `--no-yolo` for faster processing (uses OpenCV)
-4. **Lower LLM threshold**: Use `--llm-threshold 0.5` for faster LLM decisions
-
-#### Memory Issues
-```bash
-# Process smaller batches
-python executable.py --input-folder train/ --output-folder results/ --batch-size 5
-
-# Disable YOLO to save memory
-python executable.py --input-folder train/ --output-folder results/ --no-yolo
-```
-
-## Production Deployment
-
-### Running as a Service
-
-Create a systemd service:
-
-```bash
-# /etc/systemd/system/document-ai.service
-[Unit]
-Description=Document AI Processing Service
-After=network.target
-
-[Service]
-Type=simple
-User=your-user
-WorkingDirectory=/home/your-user/Documents/idfc
-Environment="PATH=/home/your-user/Documents/idfc/.venv/bin"
-ExecStart=/home/your-user/Documents/idfc/.venv/bin/python executable.py --input-folder /path/to/input --output-folder /path/to/output
-Restart=always
-
-[Install]
-WantedBy=multi-user.target
-```
-
-```bash
-sudo systemctl enable document-ai
-sudo systemctl start document-ai
-```
-
-### Logging
-
-Logs are written to `logs/` directory with timestamps:
-```bash
-# View latest log
-tail -f logs/document_ai_$(date +%Y%m%d).log
-```
-
-## Next Steps
-
-1. **Test with your documents**: Place sample documents in `train/` and run batch processing
-2. **Tune LLM threshold**: Experiment with `--llm-threshold` for your use case
-3. **Add master data**: Create comprehensive dealer/model lists for better accuracy
-4. **Monitor performance**: Check processing times and accuracy
-5. **Scale up**: Process larger batches for production use
-
-## Support
-
-For issues:
-1. Check logs in `logs/` directory
-2. Verify all prerequisites are installed
-3. Test each component individually
-4. Check the troubleshooting section above
-
-System is ready to use! 🚀

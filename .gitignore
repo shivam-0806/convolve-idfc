@@ -4,7 +4,7 @@ __pycache__
 .vscode/
 .DS_Store
 *.bat
-*.txt
+IDFC.txt
 sample_output
 train
 .venv/

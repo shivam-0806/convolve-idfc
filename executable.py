@@ -25,16 +25,16 @@ from pathlib import Path
 # Add utils to path
 sys.path.insert(0, str(Path(__file__).parent))
 
-from doc_utils.preprocessing import load_document, preprocess_for_ocr, preprocess_for_detection
-from doc_utils.ocr_engine import OCREngine
-from doc_utils.visual_detector import VisualDetector
-from doc_utils.field_extractor import FieldExtractor, load_master_data
-from doc_utils.logger import get_logger
-from doc_utils.validators import create_error_result
+from doc_ai.preprocessing import load_document, preprocess_for_ocr, preprocess_for_detection
+from doc_ai.ocr_engine import OCREngine
+from doc_ai.visual_detector import VisualDetector
+from doc_ai.field_extractor import FieldExtractor, load_master_data
+from doc_ai.logger import get_logger
+from doc_ai.validators import create_error_result
 
 # Try to import LLM extractor (Ollama-based, fully offline)
 try:
-    from doc_utils.llm_extractor import LlamaFieldExtractor
+    from doc_ai.llm_extractor import LlamaFieldExtractor
     LLM_AVAILABLE = True
 except ImportError:
     LLM_AVAILABLE = False
@@ -61,7 +61,7 @@ class DocumentAI:
             use_yolo: Whether to use YOLO for visual detection
         """
         self.logger = get_logger()
-        self.logger.info("Initializing Production-Grade Document AI system...")
+
         
         # Load master data
         dealers, models = load_master_data(dealers_file, models_file)
@@ -71,7 +71,7 @@ class DocumentAI:
             default_yolo_path = os.path.join(os.path.dirname(__file__), 'weights', 'best.pt')
             if os.path.exists(default_yolo_path):
                 yolo_model_path = default_yolo_path
-                self.logger.info(f"Using YOLO weights: {yolo_model_path}")
+
         
         # Initialize components
         self.ocr_engine = OCREngine()
@@ -95,13 +95,13 @@ class DocumentAI:
                 self.use_llm = False
             else:
                 try:
-                    self.logger.info(f"Loading Llama 3 model (OFFLINE): {llm_model}")
+
                     self.llm_extractor = LlamaFieldExtractor(
                         model=llm_model,
                         master_dealers=dealers,
                         master_models=models
                     )
-                    self.logger.info(f"✓ Llama 3 model loaded (OFFLINE mode, threshold: {llm_confidence_threshold})")
+
                 except Exception as e:
                     self.logger.error(f"Failed to load Llama 3: {e}")
                     self.logger.warning("Falling back to rule-based extraction")
@@ -109,9 +109,7 @@ class DocumentAI:
         
         extraction_mode = "Hybrid (Llama 3 OFFLINE + Rules)" if self.use_llm else "Rule-based only"
         visual_mode = "YOLO + OpenCV" if use_yolo else "OpenCV only"
-        self.logger.info(f"✓ System initialized successfully")
-        self.logger.info(f"  Extraction Mode: {extraction_mode}")
-        self.logger.info(f"  Visual Detection: {visual_mode}")
+
     
     def process_document(self, file_path: str) -> dict:
         """
@@ -130,52 +128,46 @@ class DocumentAI:
         self.logger.info(f"Processing: {file_path}")
         
         # Step 1: Load document
-        self.logger.info("[1/5] Loading document...")
         try:
             images = load_document(file_path)
             if not images:
                 raise ValueError("No images loaded from document")
             
             image = images[0]  # Process first page
-            self.logger.info(f"✓ Loaded {len(images)} page(s)")
+
             
         except Exception as e:
             self.logger.error(f"Failed to load document: {e}")
             return create_error_result(doc_id, str(e))
         
         # Step 2: Preprocess for OCR
-        self.logger.info("[2/5] Preprocessing for OCR...")
         try:
             ocr_image = preprocess_for_ocr(image, enhance=False)
-            self.logger.info("✓ Preprocessing complete")
+
         except Exception as e:
             self.logger.warning(f"Preprocessing failed: {e}, using original")
             ocr_image = image
         
         # Step 3: Extract text with OCR
-        self.logger.info("[3/5] Extracting text with OCR...")
         try:
             ocr_data = self.ocr_engine.extract_text(ocr_image)
-            self.logger.info(f"✓ Extracted {len(ocr_data)} text items")
+
         except Exception as e:
             self.logger.error(f"OCR failed: {e}")
             ocr_data = []
         
         # Step 4: Detect signature and stamp
-        self.logger.info("[4/5] Detecting signature and stamp...")
         try:
             detection_image = preprocess_for_detection(image)
             signature_result, stamp_result = self.visual_detector.detect_both(detection_image)
             
-            self.logger.info(f"  Signature: {signature_result['present']} (method: {signature_result.get('method', 'N/A')})")
-            self.logger.info(f"  Stamp: {stamp_result['present']} (method: {stamp_result.get('method', 'N/A')})")
+
         except Exception as e:
             self.logger.error(f"Detection failed: {e}")
             signature_result = {'present': False, 'bbox': [0, 0, 0, 0], 'confidence': 0.0}
             stamp_result = {'present': False, 'bbox': [0, 0, 0, 0], 'confidence': 0.0}
         
         # Step 5: Extract fields (Hybrid: LLM + Rules)
-        self.logger.info("[5/5] Extracting fields...")
         try:
             fields = self.field_extractor.extract_all_fields(
                 ocr_data, 
@@ -187,13 +179,19 @@ class DocumentAI:
                 ml_confidence_threshold=self.llm_confidence_threshold
             )
             extraction_method = fields.get('extraction_method', 'unknown')
-            self.logger.info(f"✓ Field extraction complete (method: {extraction_method})")
+
         except Exception as e:
             self.logger.error(f"Field extraction failed: {e}")
             fields = self._create_empty_fields(signature_result, stamp_result)
         
         # Calculate processing time
+        
+        # Calculate CPU cost (assuming $0.05/hour for standard CPU)
         processing_time = time.time() - start_time
+        cpu_cost_per_hour = 0.05  # USD per hour
+        cpu_cost = (processing_time / 3600) * cpu_cost_per_hour
+        
+
         
         # Create result
         result = {
@@ -207,10 +205,8 @@ class DocumentAI:
                 'stamp': stamp_result
             },
             'confidence': fields.get('confidence', 0.0),
-            'field_confidences': fields.get('field_confidences', {}),
-            'extraction_method': fields.get('extraction_method', 'unknown'),
             'processing_time_sec': round(processing_time, 2),
-            'cost_estimate_usd': 0.0  # Offline LLM - no API costs!
+            'cost_estimate_usd': round(cpu_cost, 6)  # CPU cost
         }
         
         self.logger.info(f"✓ Processing complete in {processing_time:.2f}s")
@@ -291,6 +287,14 @@ def process_batch(args):
         try:
             result = ai.process_document(file_path)
             all_results.append(result)
+
+            # Save individual JSON file for this document
+            doc_id = result.get('doc_id', f'doc_{file_num}')
+            clean_id = doc_id.rsplit('.', 1)[0] if '.' in doc_id else doc_id
+            individual_file = os.path.join(args.output_folder, f"{clean_id}.json")
+            with open(individual_file, 'w') as f:
+                json.dump(result, f, indent=2)
+
             
             # Print summary
             conf = result.get('confidence', 0)
@@ -369,7 +373,7 @@ Note: LLM runs OFFLINE via Ollama (no internet required at runtime)
     
     # Batch processing options
     parser.add_argument('--input-folder', help='Input folder containing images for batch processing')
-    parser.add_argument('--output-folder', help='Output folder for batch processing results')
+    parser.add_argument('--output-folder', default='results', help='Output folder for batch processing results (default: results)')
     parser.add_argument('--batch-size', type=int, default=None, 
                        help='Number of images to process (default: all images in folder)')
     
@@ -394,7 +398,6 @@ Note: LLM runs OFFLINE via Ollama (no internet required at runtime)
     if batch_mode:
         # Batch processing mode
         if not args.output_folder:
-            print("Error: --output-folder is required when using --input-folder", file=sys.stderr)
             sys.exit(1)
         
         if not os.path.exists(args.input_folder):

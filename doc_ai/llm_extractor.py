@@ -15,7 +15,7 @@ except ImportError:
     OLLAMA_AVAILABLE = False
     print("[!] Ollama not available. Install with: pip install ollama")
 
-from doc_utils.logger import get_logger
+from doc_ai.logger import get_logger
 
 logger = get_logger()
 
@@ -26,7 +26,7 @@ class LlamaFieldExtractor:
     def __init__(self, 
                  model: str = "llama3.2",
                  base_url: str = "http://localhost:11434",
-                 temperature: float = 0.1,
+                 temperature: float = 0.0,
                  max_tokens: int = 1000,
                  timeout: int = 30,
                  master_dealers: Optional[List[str]] = None,
@@ -54,8 +54,7 @@ class LlamaFieldExtractor:
         self.master_dealers = master_dealers or []
         self.master_models = master_models or []
         
-        # Verify Ollama connection (OFFLINE - no internet required)
-        logger.info(f"Connecting to Ollama (OFFLINE mode) at {base_url}...")
+
         try:
             response = ollama.list()
             # Handle both dict and object response formats
@@ -72,7 +71,7 @@ class LlamaFieldExtractor:
                 else:
                     available_models.append(getattr(m, 'name', getattr(m, 'model', '')))
             
-            logger.info(f"✓ Ollama connected (OFFLINE). Available models: {available_models}")
+
             
             if not any(self.model in m for m in available_models):
                 logger.warning(f"Model {self.model} not found locally. Available: {available_models}")
@@ -174,16 +173,44 @@ Return ONLY this JSON format:
                 'asset_cost': data.get('asset_cost')
             }
             
-            # Convert to proper types
+            # Clean model name - reject if too long or has address keywords
+            model_words = result['model_name'].split()
+            if len(model_words) > 10:
+                logger.warning(f"Model name too long ({len(model_words)} words): {result['model_name'][:50]}...")
+                # Try to extract just the first part before common separators
+                for sep in [' Sh;', ' Shop', ' No.', ' Road', ' At:', ' Dist']:
+                    if sep in result['model_name']:
+                        result['model_name'] = result['model_name'].split(sep)[0].strip()
+                        logger.info(f"Truncated model name to: {result['model_name']}")
+                        break
+                # Still too long? Take first 8 words
+                if len(result['model_name'].split()) > 8:
+                    result['model_name'] = ' '.join(result['model_name'].split()[:8])
+            
+            # Convert and validate HP
             if result['horse_power'] is not None:
                 try:
-                    result['horse_power'] = int(float(result['horse_power']))
+                    hp = int(float(result['horse_power']))
+                    if not (15 <= hp <= 200):
+                        logger.warning(f"HP {hp} outside valid range (15-200), setting to null")
+                        result['horse_power'] = None
+                    else:
+                        result['horse_power'] = hp
                 except (ValueError, TypeError):
                     result['horse_power'] = None
             
             if result['asset_cost'] is not None:
                 try:
-                    result['asset_cost'] = float(result['asset_cost'])
+                    cost = float(result['asset_cost'])
+                    # Validate cost range - typical tractor invoice is 300k-5M
+                    if cost < 100000:
+                        logger.warning(f"Asset cost {cost} too low (< 100k), likely error - setting to null")
+                        result['asset_cost'] = None
+                    elif cost > 10000000:
+                        logger.warning(f"Asset cost {cost} too high (> 10M), likely error - setting to null")
+                        result['asset_cost'] = None
+                    else:
+                        result['asset_cost'] = cost
                 except (ValueError, TypeError):
                     result['asset_cost'] = None
             
@@ -286,14 +313,13 @@ Return ONLY this JSON format:
         # Concatenate OCR text
         ocr_text = " ".join(item['text'] for item in ocr_data)
         
-        logger.debug(f"OCR text length: {len(ocr_text)} chars")
+
         
         # Build prompt
         prompt = self._build_prompt(ocr_text)
         
         try:
-            # Call Ollama
-            logger.info(f"Calling Llama model: {self.model}")
+
             response = ollama.generate(
                 model=self.model,
                 prompt=prompt,
@@ -305,7 +331,6 @@ Return ONLY this JSON format:
             
             # Extract response text
             response_text = response.get('response', '')
-            logger.debug(f"LLM response: {response_text[:200]}...")
             
             # Parse response
             fields = self._parse_llm_response(response_text)
@@ -323,7 +348,7 @@ Return ONLY this JSON format:
             overall_conf = sum(field_confidences[f] * weights[f] for f in weights)
             
             duration = time.time() - start_time
-            logger.info(f"LLM extraction completed in {duration:.2f}s (confidence: {overall_conf:.2f})")
+
             
             return {
                 'dealer_name': fields.get('dealer_name', ''),

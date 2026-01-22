@@ -21,9 +21,7 @@ except ImportError:
     YOLO_AVAILABLE = False
     torch = None
 
-sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from yolov5_loader import load_yolov5_model
-from doc_utils.logger import get_logger
+from doc_ai.logger import get_logger
 
 logger = get_logger()
 
@@ -67,7 +65,7 @@ class VisualDetector:
                     try:
                         self.yolo_model = torch.hub.load('ultralytics/yolov5', 'custom', path=yolo_model_path, force_reload=False, verbose=False, trust_repo=True)
                         self.yolo_model.conf = self.confidence_threshold
-                        logger.info(f"Loaded YOLOv5 model from {yolo_model_path}")
+
                     finally:
                         # Restore original path
                         sys.path = old_path
@@ -488,51 +486,46 @@ class VisualDetector:
     
     def detect_both(self, image: np.ndarray, use_yolo_primary: bool = True) -> Tuple[Dict, Dict]:
         """
-        Detect both signature and stamp (hybrid YOLO + OpenCV)
+        Detect both signature and stamp
+        - YOLO used for signature detection (primary)
+        - OpenCV used for stamp detection (always)
         
         Args:
             image: Input image
-            use_yolo_primary: Try YOLO first if available
+            use_yolo_primary: Try YOLO for signature if available
             
         Returns:
             Tuple of (signature_result, stamp_result)
         """
-        # Try YOLO first if available and enabled
+        # Try YOLO for signature detection if available
+        signature = None
         if self.use_yolo and use_yolo_primary and self.yolo_model:
             try:
-                logger.debug("Using YOLO for visual detection")
+
                 yolo_results = self.detect_with_yolo(image)
                 
                 signature = yolo_results['signature']
-                stamp = yolo_results['stamp']
                 
-                # If YOLO found both with good confidence, use it
-                if (signature['present'] and stamp['present'] and 
-                    signature['confidence'] >= self.confidence_threshold and
-                    stamp['confidence'] >= self.confidence_threshold):
-                    return signature, stamp
-                
-                # If YOLO found one but not the other, supplement with OpenCV
-                if not signature['present']:
-                    logger.debug("YOLO didn't find signature, trying OpenCV")
+                # If YOLO found signature with good confidence, use it
+                # If YOLO found signature with good confidence, use it
+                if not (signature['present'] and signature['confidence'] >= self.confidence_threshold):
+                    # YOLO didn't find signature or low confidence, try OpenCV
                     signature = self.detect_signature(image)
                     signature['method'] = 'opencv-fallback'
-                
-                if not stamp['present']:
-                    logger.debug("YOLO didn't find stamp, trying OpenCV")
-                    stamp = self.detect_stamp(image)
-                    stamp['method'] = 'opencv-fallback'
-                
-                return signature, stamp
-                
+                    
             except Exception as e:
-                logger.warning(f"YOLO detection failed: {e}, falling back to OpenCV")
+                logger.warning(f"YOLO signature detection failed: {e}, falling back to OpenCV")
+                signature = self.detect_signature(image)
+                signature['method'] = 'opencv-fallback'
+        else:
+            # YOLO not available, use OpenCV for signature
+
+            signature = self.detect_signature(image)
+            signature['method'] = 'opencv'
         
-        # Fallback to OpenCV
-        logger.debug("Using OpenCV for visual detection")
-        signature = self.detect_signature(image)
+        # Always use OpenCV for stamp detection
+
         stamp = self.detect_stamp(image)
-        signature['method'] = 'opencv'
         stamp['method'] = 'opencv'
         
         return signature, stamp
