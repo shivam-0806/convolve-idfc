@@ -1,0 +1,16 @@
+__pycache__
+*.md
+*.env
+.vscode/
+.DS_Store
+*.bat
+*.txt
+sample_output
+train
+.venv/
+venv
+*.md
+logs
+layoutlvm
+dataset
+best.pt
